@@ -1,6 +1,8 @@
 package ws.phoenix.netty.resteasy.guice;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.inject.*;
 import com.google.inject.name.Names;
 import org.jboss.resteasy.logging.Logger;
@@ -13,57 +15,77 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import com.google.inject.Module;
 
 import javax.annotation.PostConstruct;
-
+import javax.annotation.PreDestroy;
 /**
  * Created by xux on 14-3-12.
  */
+@Singleton
 public class NettyBootstrap {
     private static Logger logger = Logger.getLogger(NettyBootstrap.class);
     private Injector injector;
-    Properties confProp;
+    private ImmutableMap<String, String> properties;
     private List<Module> modules = Lists.newArrayList();
     private ResteasyDeployment deployment;
 
     public NettyBootstrap(){
         //load netty.properties
-        loadProp();
+        this.properties = Maps.fromProperties(loadProp());
+    }
+    public NettyBootstrap(Properties prop){
+        this.properties = Maps.fromProperties(prop);
+    }
+    public NettyBootstrap(ImmutableMap<String,String> properties){
+        this.properties = properties;
+    }
+    public NettyBootstrap install(Module... module){
+        this.modules.addAll(Lists.newArrayList(module));
+;        return this;
     }
 
-    public NettyBootstrap createInjector(Module module){
-        modules.add(module);
-        return createInjector();
-    }
-    public NettyBootstrap createInjector(){
-        modules.add(new GuiceModule(confProp,deployment));
-        final Stage stage = getStage();
-        if (stage == null)
-        {
-            injector = Guice.createInjector(modules);
+    public NettyBootstrap injector(Injector injector){
+        if(properties == null || properties.isEmpty()){
+            logger.error("resteasy's properties is empty.");
+            System.exit(-1);
         }
-        else
-        {
-            injector = Guice.createInjector(stage, modules);
+        createDeployment();
+        modules.add(new GuiceModule(properties,deployment));
+        this.injector = injector.createChildInjector(modules);
+        return this;
+    }
+    protected NettyBootstrap createInjector(){
+        if(injector == null){
+            modules.add(new GuiceModule(this.properties,deployment));
+            final Stage stage = getStage();
+            if (stage == null)
+            {
+                injector = Guice.createInjector(modules);
+            }
+            else
+            {
+                injector = Guice.createInjector(stage, modules);
+            }
         }
         ModuleProcessor processor = new ModuleProcessor(deployment.getRegistry(),deployment.getProviderFactory());
         processor.processInjector(injector);
 
-        while (injector.getParent() != null) {
-            injector = injector.getParent();
-            processor.processInjector(injector);
+        Injector parent = injector.getParent();
+        while (parent != null) {
+            processor.processInjector(parent);
+            parent = parent.getParent();
         }
         triggerAnnotatedMethods(PostConstruct.class);
-
         return this;
     }
-    public NettyBootstrap  createDeployment(){
+    protected NettyBootstrap  createDeployment(){
        return createDeployment(null);
     }
-    public NettyBootstrap  createDeployment(ResteasyDeployment rd){
+    protected NettyBootstrap  createDeployment(ResteasyDeployment rd){
         if(rd == null){
             deployment = new ResteasyDeployment();
         }else{
@@ -103,12 +125,12 @@ public class NettyBootstrap {
             }
         }
     }
-    protected void loadProp(){
-        confProp = new Properties();
+    protected Properties loadProp(){
+        Properties properties = new Properties();
         InputStream in = null;
         try {
             in = NettyBootstrap.class.getResourceAsStream("/netty.properties");
-            confProp.load(in);
+            properties.load(in);
         } catch (IOException e) {
             e.printStackTrace();
             System.exit(1);
@@ -120,10 +142,11 @@ public class NettyBootstrap {
                 System.exit(1);
             }
         }
+        return properties;
     }
     protected Stage getStage()
     {
-        final String stageAsString = confProp.getProperty("resteasy.guice.stage");
+        final String stageAsString = properties.get("resteasy.guice.stage");
         if (stageAsString == null)
         {
             return null;
@@ -139,20 +162,32 @@ public class NettyBootstrap {
         }
     }
 
-
+    protected Map<String,String> getProperties(){
+        return this.properties;
+    }
     public void start(SecurityDomain domain){
-        GuiceNettyJaxrsServer server = injector.getInstance(GuiceNettyJaxrsServer.class);
+        if(deployment == null){
+            createDeployment();
+        }
+        createInjector();
+        GuiceNettyJaxrsServer server = this.injector.getInstance(GuiceNettyJaxrsServer.class);
         server.setSecurityDomain(domain);
         server.start();
 
+    }
+
+    public Injector injector(){
+        return this.injector;
     }
     public void start(){
         start(null);
     }
 
     public void stop(){
+        triggerAnnotatedMethods(PreDestroy.class);
         injector.getInstance(ResteasyDeployment.class).stop();
         injector.getInstance(GuiceNettyJaxrsServer.class).stop();
+
     }
 
 }

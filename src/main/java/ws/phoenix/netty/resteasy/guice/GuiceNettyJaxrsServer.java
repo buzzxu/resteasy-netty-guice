@@ -42,7 +42,7 @@ public final class GuiceNettyJaxrsServer extends NettyJaxrsServer {
                                  @Named("netty.backlog") int backlog ){
         super();
         this.port = Integer.valueOf(port);
-        this.executorThreadCount = executorThreadCount;
+        this.executorThreadCount = executorThreadCount ;
         this.backlog = backlog;
         this.setRootResourcePath(rootResourcePath);
         this.deployment = deployment;

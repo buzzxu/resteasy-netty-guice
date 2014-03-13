@@ -1,6 +1,7 @@
 package ws.phoenix.netty.resteasy.guice;
 
 import com.google.inject.*;
+import com.google.inject.name.Named;
 import com.google.inject.name.Names;
 import org.jboss.resteasy.spi.HttpRequest;
 import org.jboss.resteasy.spi.HttpResponse;
@@ -20,6 +21,7 @@ import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.UriInfo;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -28,31 +30,40 @@ import java.util.Set;
  */
 public final class GuiceModule  extends AbstractModule{
 
-    private Properties confProp;
+    private Map<String,String> properties;
     private ResteasyDeployment rd;
 
-    public GuiceModule(Properties confProp,ResteasyDeployment rd){
-        this.confProp = confProp;
+    public GuiceModule(Map<String,String> properties,ResteasyDeployment rd){
+        this.properties = properties;
+
         this.rd = rd;
     }
-
     @Override
     protected void configure() {
 
+        //default values
+        defaultValue("netty.rootpath",String.class,"");
+        defaultValue("resteasy.guice.stage",String.class,Stage.PRODUCTION.toString());
+        defaultValue("netty.threadCount",Integer.class,16);
+        defaultValue("netty.backlog",Integer.class,128);
 
-        bind(ResteasyDeployment.class).toInstance(rd);
-        Names.bindProperties(binder(), confProp);
 
+        Names.bindProperties(binder(), properties );
         bindRequestScope();
         bindResource();
         bindProvider();
-        bind(GuiceNettyJaxrsServer.class).in(Singleton.class);
 
+        bind(GuiceNettyJaxrsServer.class);
     }
 
+    @Provides
+    @Singleton
+    ResteasyDeployment getResteasyDeployment(){
+        return rd;
+    }
 
     private void bindResource(){
-        for(String pkg : confProp.getProperty("netty.scan.pkgs").split("\\s+")){
+        for(String pkg : properties.get("resteasy.scan.pkgs").split("\\s+")){
             Reflections reflections = new Reflections(new ConfigurationBuilder()
                     .filterInputsBy(new FilterBuilder().include(FilterBuilder.prefix(pkg)))
                     .setUrls(ClasspathHelper.forPackage(pkg))
@@ -61,6 +72,7 @@ public final class GuiceModule  extends AbstractModule{
             for (Class<?> resource : pathClass){
                 bind(resource);
             }
+            // install modules
             install(reflections);
         }
     }
@@ -80,7 +92,11 @@ public final class GuiceModule  extends AbstractModule{
         }
     }
 
-
+    private <T> void defaultValue(String propName,Class<T> clazz,T value){
+        if(!properties.containsKey(propName)){
+            bind(clazz).annotatedWith(Names.named(propName)).toInstance(value);
+        }
+    }
     /**
      * @see <code>>org.jboss.resteasy.plugins.guice.ext.RequestScopeModule.ResteasyContextProvider</code>
      */
