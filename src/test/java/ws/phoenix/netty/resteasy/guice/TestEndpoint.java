@@ -34,8 +34,8 @@ public class TestEndpoint {
     public Map test1(){
         Map<String,String> map = Maps.newHashMap();
         System.out.println(this);
-        map.put("name","徐翔");
-        map.put("address","西安");
+        map.put("name","phoenix");
+        map.put("address","xi'an");
         map.put("path",request.getUri().getPath());
         return map;
     }
@@ -48,7 +48,7 @@ public class TestEndpoint {
         System.out.println(this);
         Map<String,String> map = Maps.newHashMap();
         map.put("name",name);
-        map.put("address","西安");
+        map.put("address","xi'an");
         return map;
     }
 
