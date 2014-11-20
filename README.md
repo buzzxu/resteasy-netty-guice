@@ -1,6 +1,4 @@
 # resteasy-netty-guice
-
-Resteasy结合netty提供RESTful Web Services，使用Guice作为依赖注入容器
 # Examples
 
         public void startServer() {
